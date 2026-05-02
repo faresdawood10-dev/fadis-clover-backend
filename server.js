@@ -4,7 +4,7 @@ import cors from "cors";
 const app = express();
 
 app.use(cors({
-  origin: ["https://fadishawarma.ca", "https://www.fadishawarma.ca"]
+  origin: "*"
 }));
 
 app.use(express.json());
@@ -23,9 +23,9 @@ app.post("/create-checkout", async (req, res) => {
 
     const shoppingCart = {
       lineItems: items.map(item => ({
-        name: item.name,
-        price: Math.round(item.price * 100),
-        unitQty: item.qty || 1
+        name: String(item.name || "Menu Item"),
+        price: Math.round(Number(item.price) * 100),
+        unitQty: Number(item.qty) || 1
       }))
     };
 
@@ -53,7 +53,11 @@ app.post("/create-checkout", async (req, res) => {
     const data = await response.json();
 
     if (!response.ok) {
-      return res.status(response.status).json(data);
+      return res.status(response.status).json({
+        error: "Clover checkout failed.",
+        cloverStatus: response.status,
+        cloverResponse: data
+      });
     }
 
     res.json({
@@ -70,6 +74,7 @@ app.post("/create-checkout", async (req, res) => {
 });
 
 const port = process.env.PORT || 10000;
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });
