@@ -57,13 +57,13 @@ app.post("/create-checkout", async (req, res) => {
     const data = await response.json();
 
     if (!response.ok) {
-      return res.status(response.status).json({
-        error: "Clover checkout failed.",
-        cloverStatus: response.status,
-        cloverResponse: data
-      });
-    }
-
+  console.error("CLOVER ERROR:", data);
+  return res.status(response.status).json({
+    error: "Clover checkout failed.",
+    cloverStatus: response.status,
+    cloverResponse: data
+  });
+}
     res.json({
       checkoutUrl: data.href || data.checkoutUrl || data.url,
       raw: data
