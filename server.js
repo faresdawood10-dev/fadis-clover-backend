@@ -37,17 +37,19 @@ app.post("/create-checkout", async (req, res) => {
 
     const cloverUrl =
       process.env.CLOVER_ENV === "production"
-        ? "https://scl.clover.com/invoicingcheckoutservice/v1/checkouts"
-        : "https://scl-sandbox.dev.clover.com/invoicingcheckoutservice/v1/checkouts";
+        ? "https://api.clover.com/invoicingcheckoutservice/v1/checkouts"
+        : "https://apisandbox.dev.clover.com/invoicingcheckoutservice/v1/checkouts";
 
     console.log("Clover environment:", process.env.CLOVER_ENV);
     console.log("Clover URL:", cloverUrl);
     console.log("Token exists:", !!process.env.CLOVER_PRIVATE_TOKEN);
+    console.log("Merchant ID exists:", !!process.env.CLOVER_MERCHANT_ID);
 
     const response = await fetch(cloverUrl, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.CLOVER_PRIVATE_TOKEN}`,
+        "X-Clover-Merchant-Id": process.env.CLOVER_MERCHANT_ID,
         "Content-Type": "application/json",
         "User-Agent": "Fadis-Shawarma-Checkout"
       },
