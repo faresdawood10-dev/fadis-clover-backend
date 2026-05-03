@@ -84,60 +84,38 @@ app.post("/create-checkout", async (req, res) => {
 
     if (!MERCHANT_ID || !TOKEN) {
       return res.status(500).json({
-        error: "Missing Clover environment variables.",
-        required: ["CLOVER_MERCHANT_ID", "CLOVER_PRIVATE_TOKEN", "CLOVER_ENV"]
+        error: "Missing Clover environment variables."
       });
     }
 
-    const { items } = req.body;
+    const { items, customerName } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: "Cart is empty." });
     }
 
     const cleanItems = sanitizeItems(items);
+    const name = customerName ? String(customerName).trim().slice(0, 80) : "Guest";
+    const orderNumber = Date.now().toString().slice(-5);
 
-    const invalidItem = cleanItems.find(
-      item => !item.name || !Number.isFinite(item.price) || item.price <= 0 || item.qty <= 0
-    );
+    const orderNote =
+      `ONLINE ORDER #${orderNumber}\n` +
+      `Customer: ${name}\n` +
+      `Source: fadishawarma.ca`;
 
-    if (invalidItem) {
-      return res.status(400).json({
-        error: "Invalid item in cart.",
-        invalidItem
-      });
-    }
-
-    /*
-      STEP 1: Create a Clover order.
-      This creates the real order object Clover can print.
-    */
     const order = await cloverFetch(
       `${API_BASE}/v3/merchants/${MERCHANT_ID}/orders`,
       {
         method: "POST",
         body: JSON.stringify({
-          title: "Website Pickup Order",
-          note: "Order created from fadishawarma.ca website checkout."
+          title: `Online Order #${orderNumber}`,
+          note: orderNote
         })
       }
     );
 
     const orderId = order.id;
 
-    if (!orderId) {
-      return res.status(500).json({
-        error: "Clover order was created but no order ID was returned.",
-        order
-      });
-    }
-
-    console.log("Created Clover order:", orderId);
-
-    /*
-      STEP 2: Add line items to the order.
-      Clover line item prices are in cents.
-    */
     for (const item of cleanItems) {
       await cloverFetch(
         `${API_BASE}/v3/merchants/${MERCHANT_ID}/orders/${orderId}/line_items`,
@@ -146,18 +124,13 @@ app.post("/create-checkout", async (req, res) => {
           body: JSON.stringify({
             name: item.name,
             price: item.price,
-            unitQty: item.qty
+            unitQty: item.qty,
+            note: `Order #${orderNumber} | Customer: ${name}`
           })
         }
       );
     }
 
-    console.log("Added line items to order:", orderId);
-
-    /*
-      STEP 3: Send order to Clover printer.
-      If this fails, we still continue to checkout, but return print warning.
-    */
     let printResult = null;
     let printWarning = null;
 
@@ -167,27 +140,18 @@ app.post("/create-checkout", async (req, res) => {
         {
           method: "POST",
           body: JSON.stringify({
-            orderRef: {
-              id: orderId
-            }
+            orderRef: { id: orderId }
           })
         }
       );
-
-      console.log("Print event sent for order:", orderId);
     } catch (printError) {
       printWarning = {
         status: printError.status || 500,
         data: printError.data || printError.message
       };
-
       console.error("PRINT ERROR:", printWarning);
     }
 
-    /*
-      STEP 4: Create Hosted Checkout session.
-      This opens Clover payment page for the same cart total.
-    */
     const shoppingCart = {
       lineItems: cleanItems.map(item => ({
         name: item.name,
@@ -199,7 +163,9 @@ app.post("/create-checkout", async (req, res) => {
     const checkout = await cloverFetch(CHECKOUT_URL, {
       method: "POST",
       body: JSON.stringify({
-        customer: {},
+        customer: {
+          firstName: name
+        },
         shoppingCart,
         redirectUrls: {
           success: "https://fadishawarma.ca/thankyou.html",
@@ -223,10 +189,12 @@ app.post("/create-checkout", async (req, res) => {
     res.json({
       checkoutUrl,
       orderId,
+      orderNumber,
       printResult,
       printWarning,
       raw: checkout
     });
+
   } catch (error) {
     console.error("SERVER/CLOVER ERROR:", {
       message: error.message,
